@@ -1,0 +1,4 @@
+[app]
+name = "obso"
+repo = "ryangerardwilson/obso"
+install_strategy = "local-checkout"
