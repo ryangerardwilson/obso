@@ -18,7 +18,7 @@ APP_ROOT = Path(__file__).resolve().parent
 INSTALL_SCRIPT = Path(os.environ.get("OBSO_INSTALL_SCRIPT") or APP_ROOT / "install.sh")
 
 HELP_TEXT = """obso
-build and reapply safe Omarchy Plymouth logo overrides from your active theme
+apply safe Omarchy Plymouth logo overrides from your active theme
 
 flags:
   obso -h
@@ -29,23 +29,9 @@ flags:
     install or refresh this local app
 
 features:
-  build an app-owned Plymouth logo from the active theme, or from a named theme
-  # obso build [theme]
-  obso build
-  obso build mono-dark
-
-  install the active theme logo override into Plymouth when needed
-  # obso apply [theme]
-  obso apply
-  obso apply mono-dark
-
-  install or refresh the Omarchy hook wiring and 3-hour background reapply timer
-  # obso hooks
-  obso hooks
-
-  inspect the current theme, app asset, hook status, and timer wiring
-  # obso status
-  obso status
+  apply the current theme logo override and ensure the 3-hour background timer
+  # obso run
+  obso run
 """
 
 THEME_SET_HOOK_LINE = '"$HOME/.config/omarchy/hooks/obso_apply" "$1" >/dev/null 2>&1 || true'
@@ -342,9 +328,9 @@ def ensure_wrapper_script() -> Path:
             "#!/bin/bash",
             "set -euo pipefail",
             f'if command -v {APP_NAME} >/dev/null 2>&1; then',
-            f'  exec {APP_NAME} apply "${{1:-}}"',
+            f'  exec env OBSO_SKIP_RUNTIME_INSTALL=1 {APP_NAME} run',
             "fi",
-            f'exec "{launcher}" apply "${{1:-}}"',
+            f'exec env OBSO_SKIP_RUNTIME_INSTALL=1 "{launcher}" run',
             "",
         ]
     )
@@ -402,6 +388,7 @@ def ensure_service_unit() -> None:
             "[Service]",
             "Type=oneshot",
             "Environment=OBSO_NONINTERACTIVE_SUDO=1",
+            "Environment=OBSO_SKIP_RUNTIME_INSTALL=1",
             f"ExecStart={hook_wrapper_path()}",
             "",
         ]
@@ -481,29 +468,12 @@ def install_hooks() -> int:
     return 0
 
 
-def status() -> int:
-    theme = resolve_theme_name(None)
-    logo = app_logo_path(theme)
-    legacy_logo = legacy_theme_logo_path(theme)
-    print(f"theme: {theme}")
-    print(f"theme_dir: {theme_dir(theme)}")
-    print(f"app_logo: {logo}")
-    print(f"app_logo_exists: {'yes' if logo.exists() else 'no'}")
-    print(f"legacy_theme_logo: {legacy_logo}")
-    print(f"legacy_theme_logo_exists: {'yes' if legacy_logo.exists() else 'no'}")
-    print(f"hook_wrapper: {hook_wrapper_path()}")
-    print(f"hook_wrapper_exists: {'yes' if hook_wrapper_path().exists() else 'no'}")
-    theme_hook = hooks_dir() / "theme-set"
-    update_hook = hooks_dir() / "post-update"
-    print(f"theme_set_hook: {theme_hook}")
-    print(f"theme_set_managed: {'yes' if theme_hook.exists() and THEME_SET_HOOK_LINE in theme_hook.read_text(encoding='utf-8') else 'no'}")
-    print(f"post_update_hook: {update_hook}")
-    print(f"post_update_managed: {'yes' if update_hook.exists() and POST_UPDATE_HOOK_LINE in update_hook.read_text(encoding='utf-8') else 'no'}")
-    print(f"service_unit: {service_path()}")
-    print(f"service_unit_exists: {'yes' if service_path().exists() else 'no'}")
-    print(f"timer_unit: {timer_path()}")
-    print(f"timer_unit_exists: {'yes' if timer_path().exists() else 'no'}")
-    return 0
+def run_command() -> int:
+    if os.environ.get("OBSO_SKIP_RUNTIME_INSTALL") != "1":
+        rc = install_hooks()
+        if rc != 0:
+            return rc
+    return apply_logo(None)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -520,19 +490,11 @@ def main(argv: list[str] | None = None) -> int:
     if args == ["-u"]:
         return install_self()
 
-    if args[0] == "build" and len(args) <= 2:
-        logo = build_logo(args[1] if len(args) == 2 else None)
-        print(logo)
-        return 0
-
-    if args[0] == "apply" and len(args) <= 2:
-        return apply_logo(args[1] if len(args) == 2 else None)
-
-    if args == ["hooks"]:
+    if args == ["--install-runtime"]:
         return install_hooks()
 
-    if args == ["status"]:
-        return status()
+    if args == ["run"]:
+        return run_command()
 
     print_help()
     return 1

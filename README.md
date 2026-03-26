@@ -27,11 +27,7 @@ export PATH="$HOME/.local/bin:$PATH"
 obso -h
 obso -v
 obso -u
-
-obso hooks
-obso build
-obso apply
-obso status
+obso run
 ```
 
 ## Notes
@@ -39,8 +35,7 @@ obso status
 - Generated logos are stored under
   `~/.config/omarchy/obso/assets/<theme>/plymouth-logo.png`.
 - Theme source assets are read from `~/.config/omarchy/themes/<theme>/`.
-- `hooks` wires Omarchy's `theme-set` and `post-update` hooks to call this app.
-- `hooks` also installs a user `systemd` timer that reruns the override every 3
-  hours.
-- `apply` still needs `sudo`, because Plymouth assets live under
+- `run` applies the override for the active theme and ensures the 3-hour
+  background timer is installed.
+- `run` still needs `sudo`, because Plymouth assets live under
   `/usr/share/plymouth/themes/omarchy/`.

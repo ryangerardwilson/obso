@@ -97,7 +97,7 @@ exec "${INSTALL_DIR}/${APP}" "\$@"
 EOF
 chmod 755 "${PUBLIC_LAUNCHER}"
 
-"${PUBLIC_LAUNCHER}" hooks
+"${PUBLIC_LAUNCHER}" --install-runtime
 
 rm -rf "${LEGACY_APP_HOME}"
 rm -f "${LEGACY_PUBLIC_LAUNCHER}"

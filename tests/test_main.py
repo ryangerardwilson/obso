@@ -35,13 +35,18 @@ class MainContractTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(result.stdout.strip(), "0.0.0")
 
-    def test_build_uses_current_theme_and_writes_app_owned_logo(self):
+    def test_run_applies_logo_and_installs_timer(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp = Path(temp_dir)
             theme_root = temp / "themes"
             asset_root = temp / "assets"
+            plymouth_dir = temp / "plymouth"
+            hooks_dir = temp / "hooks"
+            systemd_user_dir = temp / "systemd-user"
             theme_dir = theme_root / "mono-dark"
             theme_dir.mkdir(parents=True)
+            plymouth_dir.mkdir()
+            hooks_dir.mkdir()
             (theme_dir / "wallpaper.txt").write_text(
                 "\n\n"
                 "    ██  ██\n"
@@ -74,32 +79,6 @@ class MainContractTests(unittest.TestCase):
             )
             magick.chmod(0o755)
 
-            result = run_app(
-                "build",
-                env={
-                    "OBSO_THEME_ROOT": str(theme_root),
-                    "OBSO_ASSET_ROOT": str(asset_root),
-                    "OBSO_CURRENT_THEME_FILE": str(current_theme),
-                    "OBSO_FC_MATCH_BIN": str(fc_match),
-                    "OBSO_MAGICK_BIN": str(magick),
-                },
-            )
-
-            self.assertEqual(result.returncode, 0)
-            output = Path(result.stdout.strip())
-            self.assertTrue(output.exists())
-            self.assertEqual(output.read_bytes(), b"png")
-            self.assertEqual(output, asset_root / "mono-dark" / "plymouth-logo.png")
-
-    def test_hooks_command_installs_wrapper_hooks_and_timer(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp = Path(temp_dir)
-            hooks_dir = temp / "hooks"
-            systemd_user_dir = temp / "systemd-user"
-            hooks_dir.mkdir()
-            theme_set = hooks_dir / "theme-set"
-            theme_set.write_text("#!/bin/bash\n\necho existing\n", encoding="utf-8")
-
             systemctl = temp / "systemctl"
             systemctl.write_text(
                 "#!/usr/bin/env bash\n"
@@ -108,20 +87,65 @@ class MainContractTests(unittest.TestCase):
             )
             systemctl.chmod(0o755)
 
+            sudo = temp / "sudo"
+            sudo.write_text(
+                "#!/usr/bin/env bash\n"
+                "if [[ \"${1:-}\" == \"-n\" ]]; then shift; fi\n"
+                "exec \"$@\"\n",
+                encoding="utf-8",
+            )
+            sudo.chmod(0o755)
+
+            plymouth_set_default_theme = temp / "plymouth-set-default-theme"
+            plymouth_set_default_theme.write_text(
+                "#!/usr/bin/env bash\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            plymouth_set_default_theme.chmod(0o755)
+
+            mkinitcpio = temp / "mkinitcpio"
+            mkinitcpio.write_text(
+                "#!/usr/bin/env bash\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            mkinitcpio.chmod(0o755)
+
+            limine_mkinitcpio = temp / "limine-mkinitcpio"
+            limine_mkinitcpio.write_text(
+                "#!/usr/bin/env bash\n"
+                "exit 0\n",
+                encoding="utf-8",
+            )
+            limine_mkinitcpio.chmod(0o755)
+
             systemctl_log = temp / "systemctl.log"
             result = run_app(
-                "hooks",
+                "run",
                 env={
+                    "OBSO_THEME_ROOT": str(theme_root),
+                    "OBSO_ASSET_ROOT": str(asset_root),
                     "OBSO_HOOKS_DIR": str(hooks_dir),
                     "OBSO_SYSTEMD_USER_DIR": str(systemd_user_dir),
                     "OBSO_SYSTEMCTL_BIN": str(systemctl),
                     "OBSO_SYSTEMCTL_LOG": str(systemctl_log),
+                    "OBSO_CURRENT_THEME_FILE": str(current_theme),
+                    "OBSO_PLYMOUTH_TARGET_DIR": str(plymouth_dir),
+                    "OBSO_FC_MATCH_BIN": str(fc_match),
+                    "OBSO_MAGICK_BIN": str(magick),
+                    "PATH": f"{temp}:{os.environ['PATH']}",
                 },
             )
-            self.assertEqual(result.returncode, 0)
 
+            self.assertEqual(result.returncode, 0)
+            output = asset_root / "mono-dark" / "plymouth-logo.png"
+            self.assertTrue(output.exists())
+            self.assertEqual(output.read_bytes(), b"png")
+            self.assertEqual((plymouth_dir / "logo.png").read_bytes(), b"png")
             wrapper = hooks_dir / "obso_apply"
             self.assertTrue(wrapper.exists())
+            theme_set = hooks_dir / "theme-set"
             self.assertIn(
                 'obso_apply" "$1" >/dev/null 2>&1 || true',
                 theme_set.read_text(encoding="utf-8"),
